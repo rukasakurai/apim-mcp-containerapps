@@ -1,12 +1,6 @@
 name: APIM Bicep Provision & Test
 
 on:
-  push:
-    paths:
-      - 'infra/**'
-      - 'azure.yaml'
-      - 'tests/**'
-      - '.github/workflows/apim-provision-test.yml'
   pull_request:
     paths:
       - 'infra/**'
@@ -24,6 +18,10 @@ on:
           - provision-and-teardown
           - provision-only
           - teardown-only
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 permissions:
   id-token: write
@@ -45,10 +43,6 @@ jobs:
   provision:
     name: Provision, Test & Teardown
     needs: validate
-    # Provision Azure resources on main branch pushes, pull requests, or manual dispatch.
-    # Feature branch pushes (not PRs) run only the validate job (lint/build).
-    # OIDC federated credentials exist for refs/heads/main and pull_request.
-    if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       AZURE_ENV_NAME: apim-ci-${{ github.run_id }}
