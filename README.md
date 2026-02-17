@@ -1,34 +1,91 @@
-# repo-baseline
+# APIM MCP Container Apps
 
-A minimal GitHub template repository providing baseline structure and conventions for new projects.
+Azure API Management (Standard V2) infrastructure deployed with Bicep and the Azure Developer CLI (`azd`).
 
-## What This Is
+## Architecture
 
-This is a **template repository** that provides:
-- Contribution guidelines ([CONTRIBUTING.md](CONTRIBUTING.md)) and AI collaboration guidance ([AGENTS.md](AGENTS.md))
-- Issue and pull request templates for structured communication
-- Manual Azure OIDC validation workflow
-- A starting point that avoids premature technical decisions
+This project provisions an Azure API Management instance using the **Standard V2** SKU via Bicep templates that are compatible with the Azure Developer CLI.
 
-This template is intentionally minimal and public-safe, containing no secrets, licenses, or environment-specific configuration.
+### Resources Created
 
-## How to Use as a Template
+| Resource | Description |
+|----------|-------------|
+| **Resource Group** | Container for all deployed resources |
+| **Azure API Management** | Standard V2 SKU instance |
 
-1. Click the **"Use this template"** button on GitHub
-2. Create a new repository from this template (public or private)
-3. Follow the post-creation checklist below
+## Prerequisites
 
-## Post-Creation Checklist
+- [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
+- An Azure subscription with permissions to create API Management resources
 
-After creating a repository from this template:
+## Getting Started
 
-- [ ] **Choose and add a LICENSE file** - This template intentionally omits a license; add one appropriate for your project
-- [ ] **Configure Azure OIDC** (if using Azure) - Set up federated credentials and add the following repository secrets:
-  - `AZURE_CLIENT_ID` (repository variable)
-  - `AZURE_TENANT_ID` (repository secret)
-  - `AZURE_SUBSCRIPTION_ID` (repository secret)
-  
-  See [docs/azure-oidc-setup.md](docs/azure-oidc-setup.md) for detailed setup instructions. Then run the "Azure OIDC Connectivity Check" workflow manually to verify the configuration.
-- [ ] **Enable AI agent Azure access** (if using Azure with Copilot coding agent) - Run `azd coding-agent config` to give AI agents read-time visibility into Azure state while authoring changes. See [docs/azure-coding-agent-guide.md](docs/azure-coding-agent-guide.md) for guidance.
-- [ ] **Update README.md** - Replace this generic template README with repository-specific documentation
-- [ ] **Review AGENTS.md** - Update or remove this file to reflect your repository's specific purpose and conventions
+1. **Clone the repository**
+
+   ```bash
+   git clone https://github.com/rukasakurai/apim-mcp-containerapps.git
+   cd apim-mcp-containerapps
+   ```
+
+2. **Log in to Azure**
+
+   ```bash
+   azd auth login
+   ```
+
+3. **Provision the infrastructure**
+
+   ```bash
+   azd provision
+   ```
+
+   You will be prompted for:
+   - **Environment name** – used to name the resource group and resources
+   - **Azure location** – region for deployment (e.g., `eastus`)
+   - **Publisher email** – required by API Management
+   - **Publisher name** – organization name shown in the developer portal
+
+4. **Tear down resources when done**
+
+   ```bash
+   azd down --force --purge
+   ```
+
+## Project Structure
+
+```
+├── azure.yaml                 # azd project configuration
+├── infra/
+│   ├── main.bicep             # Main deployment (subscription scope)
+│   ├── main.parameters.json   # Parameter definitions with azd variable substitution
+│   ├── apim.bicep             # API Management module (Standard V2 SKU)
+│   └── abbreviations.json     # Resource naming abbreviations
+├── .github/
+│   ├── agents/
+│   │   └── apim.agent.md      # Agent notes and challenges
+│   └── workflows/
+│       └── apim-provision.yml # CI workflow: lint, build, provision, teardown
+└── README.md
+```
+
+## CI/CD
+
+The **APIM Bicep Provision** workflow (`.github/workflows/apim-provision.yml`) runs automatically on every push or pull request that modifies files in `infra/` or `azure.yaml`:
+
+- **Build & Lint** – validates Bicep files on every push and PR
+- **Provision & Teardown** – runs `azd provision` followed by `azd down` on pushes to `main` (requires Azure OIDC credentials configured as repository secrets/variables)
+
+### Required Repository Configuration
+
+| Name | Type | Description |
+|------|------|-------------|
+| `AZURE_CLIENT_ID` | Variable | App registration client ID for OIDC |
+| `AZURE_TENANT_ID` | Secret | Azure AD tenant ID |
+| `AZURE_SUBSCRIPTION_ID` | Secret | Target Azure subscription ID |
+
+See [docs/azure-oidc-setup.md](docs/azure-oidc-setup.md) for OIDC setup instructions.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
