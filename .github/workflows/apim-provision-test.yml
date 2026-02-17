@@ -53,8 +53,8 @@ jobs:
       AZURE_MCP_SERVER_NAME: e2e-mcp-server
       AZURE_MCP_SERVER_BASE_PATH: mcp
       AZURE_MCP_SERVER_DESCRIPTION: MCP server for E2E testing
-      AZURE_MCP_SERVER_BACKEND_BASE_URL: https://learn.microsoft.com
-      AZURE_MCP_SERVER_ENDPOINT_URI_TEMPLATE: /api/mcp
+      AZURE_MCP_SERVER_BACKEND_BASE_URL: https://learn.microsoft.com/api/mcp
+      AZURE_MCP_SERVER_ENDPOINT_URI_TEMPLATE: /mcp
     steps:
       - uses: actions/checkout@v4
 
