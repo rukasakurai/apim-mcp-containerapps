@@ -85,4 +85,4 @@ resource mcpApi 'Microsoft.ApiManagement/service/apis@2024-06-01-preview' = {
 
 output name string = apim.name
 output gatewayUrl string = apim.properties.gatewayUrl
-output mcpServerUrl string = '${apim.properties.gatewayUrl}/${mcpServerBasePath}/mcp'
+output mcpServerUrl string = '${apim.properties.gatewayUrl}/${mcpServerBasePath}'
