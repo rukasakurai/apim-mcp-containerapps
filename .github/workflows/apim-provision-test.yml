@@ -45,14 +45,14 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     env:
-      AZURE_ENV_NAME: apim-ci-${{ github.run_id }}
+      AZURE_ENV_NAME: apim-e2e-${{ github.run_id }}
       AZURE_LOCATION: eastus
-      AZURE_APIM_PUBLISHER_EMAIL: ci@example.com
-      AZURE_APIM_PUBLISHER_NAME: CI Publisher
-      AZURE_MCP_SERVER_DISPLAY_NAME: CI MCP Server
-      AZURE_MCP_SERVER_NAME: ci-mcp-server
+      AZURE_APIM_PUBLISHER_EMAIL: e2e@example.com
+      AZURE_APIM_PUBLISHER_NAME: E2E Publisher
+      AZURE_MCP_SERVER_DISPLAY_NAME: E2E MCP Server
+      AZURE_MCP_SERVER_NAME: e2e-mcp-server
       AZURE_MCP_SERVER_BASE_PATH: mcp
-      AZURE_MCP_SERVER_DESCRIPTION: MCP server for CI testing
+      AZURE_MCP_SERVER_DESCRIPTION: MCP server for E2E testing
       AZURE_MCP_SERVER_BACKEND_BASE_URL: https://learn.microsoft.com
       AZURE_MCP_SERVER_ENDPOINT_URI_TEMPLATE: /api/mcp
     steps:
