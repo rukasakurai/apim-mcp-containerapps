@@ -31,7 +31,6 @@ jobs:
     name: Provision & Teardown
     needs: validate
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
       AZURE_ENV_NAME: apim-ci-${{ github.run_id }}
       AZURE_LOCATION: eastus
