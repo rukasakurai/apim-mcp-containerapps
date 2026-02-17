@@ -119,19 +119,18 @@ wait_for_ready() {
   info "Will retry up to $MAX_RETRIES times, every ${RETRY_INTERVAL}s"
 
   for i in $(seq 1 "$MAX_RETRIES"); do
-    # Use a lightweight POST to check if the gateway is responding.
-    # We send a minimal JSON-RPC ping; any HTTP response (even an error
-    # from the backend) means APIM is up. We only retry on connection
-    # failures and gateway-level errors (502/503/504).
+    # Send a real MCP initialize request. We wait until we get a 2xx back,
+    # which confirms APIM is up AND the MCP API route has propagated.
+    # 404 means APIM is responding but the MCP API isn't registered yet.
     local code
     code=$(curl --silent --output /dev/null --write-out "%{http_code}" \
       --max-time 10 \
       --header "Content-Type: application/json" \
       --header "Accept: application/json, text/event-stream" \
-      --data '{"jsonrpc":"2.0","id":0,"method":"ping"}' \
+      --data '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"readiness-probe","version":"0.0.1"}}}' \
       "$MCP_URL" 2>/dev/null) || code="000"
 
-    if [[ "$code" != "000" && "$code" != "502" && "$code" != "503" && "$code" != "504" ]]; then
+    if [[ "$code" =~ ^2[0-9]{2}$ ]]; then
       pass "Endpoint ready (HTTP $code) after $i attempt(s)"
       return 0
     fi
