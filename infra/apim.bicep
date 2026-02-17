@@ -25,10 +25,10 @@ param mcpServerBasePath string
 @description('Description of the MCP server')
 param mcpServerDescription string
 
-@description('Backend MCP server base URL (e.g. https://learn.microsoft.com)')
+@description('Backend MCP server base URL — the full URL to the MCP endpoint (e.g. https://learn.microsoft.com/api/mcp)')
 param mcpServerBackendBaseUrl string
 
-@description('MCP endpoint URI template on the backend (e.g. /api/mcp)')
+@description('MCP endpoint URI template on the backend (e.g. / when backend URL is the full MCP endpoint)')
 param mcpServerEndpointUriTemplate string
 
 // APIM instance (stable API version)
@@ -85,4 +85,4 @@ resource mcpApi 'Microsoft.ApiManagement/service/apis@2024-06-01-preview' = {
 
 output name string = apim.name
 output gatewayUrl string = apim.properties.gatewayUrl
-output mcpServerUrl string = '${apim.properties.gatewayUrl}/${mcpServerBasePath}/mcp'
+output mcpServerUrl string = '${apim.properties.gatewayUrl}/${mcpServerBasePath}'

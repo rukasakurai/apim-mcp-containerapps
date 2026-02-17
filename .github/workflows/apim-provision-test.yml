@@ -1,0 +1,133 @@
+name: APIM Bicep Provision & Test
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+      - 'azure.yaml'
+      - 'tests/**'
+      - '.github/workflows/apim-provision-test.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'provision-and-teardown'
+        type: choice
+        options:
+          - provision-and-teardown
+          - provision-only
+          - teardown-only
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validate:
+    name: Build & Lint Bicep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint Bicep files
+        run: az bicep lint --file infra/main.bicep
+
+      - name: Build Bicep files
+        run: az bicep build --file infra/main.bicep
+
+  provision:
+    name: Provision, Test & Teardown
+    needs: validate
+    runs-on: ubuntu-latest
+    env:
+      AZURE_ENV_NAME: apim-e2e-${{ github.run_id }}
+      AZURE_LOCATION: eastus
+      AZURE_APIM_PUBLISHER_EMAIL: e2e@example.com
+      AZURE_APIM_PUBLISHER_NAME: E2E Publisher
+      AZURE_MCP_SERVER_DISPLAY_NAME: E2E MCP Server
+      AZURE_MCP_SERVER_NAME: e2e-mcp-server
+      AZURE_MCP_SERVER_BASE_PATH: mcp
+      AZURE_MCP_SERVER_DESCRIPTION: MCP server for E2E testing
+      AZURE_MCP_SERVER_BACKEND_BASE_URL: https://learn.microsoft.com/api/mcp
+      AZURE_MCP_SERVER_ENDPOINT_URI_TEMPLATE: /
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install azd
+        uses: Azure/setup-azd@v2
+
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Provision infrastructure
+        if: inputs.action != 'teardown-only'
+        run: |
+          azd config set auth.useAzCliAuth true
+          azd provision --no-prompt
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get MCP server URL
+        id: get-mcp-url
+        if: inputs.action != 'teardown-only'
+        run: |
+          azd config set auth.useAzCliAuth true
+          MCP_URL=$(azd env get-value AZURE_MCP_SERVER_URL 2>/dev/null || echo "")
+          echo "mcp_url=$MCP_URL" >> "$GITHUB_OUTPUT"
+          echo "MCP Server URL: $MCP_URL"
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Diagnose APIM resources
+        if: inputs.action != 'teardown-only'
+        run: |
+          azd config set auth.useAzCliAuth true
+          RG=$(azd env get-value AZURE_RESOURCE_GROUP 2>/dev/null || echo "")
+          APIM_NAME=$(azd env get-value AZURE_APIM_NAME 2>/dev/null || echo "")
+          SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          echo "Resource Group: $RG"
+          echo "APIM Name: $APIM_NAME"
+          echo "--- APIs (preview API version) ---"
+          az rest --method GET \
+            --url "https://management.azure.com/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_NAME}/apis?api-version=2024-06-01-preview" \
+            --query "value[].{name:name, type:properties.type, path:properties.path, backendId:properties.backendId, serviceUrl:properties.serviceUrl, mcpProperties:properties.mcpProperties}" \
+            -o json 2>&1 || echo "Failed to list APIs"
+          echo "--- Backends ---"
+          az rest --method GET \
+            --url "https://management.azure.com/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_NAME}/backends?api-version=2024-06-01-preview" \
+            --query "value[].{name:name, url:properties.url, protocol:properties.protocol}" \
+            -o json 2>&1 || echo "Failed to list backends"
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Test MCP endpoint
+        if: inputs.action != 'teardown-only' && steps.get-mcp-url.outputs.mcp_url != ''
+        timeout-minutes: 10
+        run: ./tests/test-mcp-endpoint.sh "${{ steps.get-mcp-url.outputs.mcp_url }}"
+        env:
+          MAX_RETRIES: 30
+          RETRY_INTERVAL: 10
+
+      - name: Upload test logs
+        if: always() && inputs.action != 'teardown-only'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-test-results
+          path: tests/
+          retention-days: 7
+        continue-on-error: true
+
+      - name: Teardown infrastructure
+        if: always() && inputs.action != 'provision-only'
+        run: azd down --force --purge --no-prompt
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
