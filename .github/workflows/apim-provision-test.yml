@@ -91,6 +91,7 @@ jobs:
 
       - name: Test MCP endpoint
         if: inputs.action != 'teardown-only' && steps.get-mcp-url.outputs.mcp_url != ''
+        timeout-minutes: 10
         run: ./tests/test-mcp-endpoint.sh "${{ steps.get-mcp-url.outputs.mcp_url }}"
         env:
           MAX_RETRIES: 30

@@ -27,6 +27,7 @@ RETRY_INTERVAL="${RETRY_INTERVAL:-10}"
 PASS=0
 FAIL=0
 SESSION_ID=""
+FIRST_TOOL_NAME=""
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -39,11 +40,12 @@ fatal() { echo "💥 $*" >&2; exit 1; }
 # Send a JSON-RPC request to the MCP endpoint and capture response + headers.
 # Globals: SESSION_ID (read), MCP_URL (read)
 # Arguments: $1 = JSON body
-# Outputs:  Sets RESPONSE_BODY, RESPONSE_CODE, RESPONSE_HEADERS
+# Outputs:  Sets RESPONSE_BODY, RESPONSE_CODE, RESPONSE_HEADERS, CURL_STDERR
 mcp_request() {
   local body="$1"
-  local tmp_headers
+  local tmp_headers tmp_stderr
   tmp_headers=$(mktemp)
+  tmp_stderr=$(mktemp)
 
   local -a curl_args=(
     --silent
@@ -62,13 +64,18 @@ mcp_request() {
   fi
 
   local raw
-  raw=$(curl "${curl_args[@]}" "$MCP_URL" 2>&1) || true
+  raw=$(curl "${curl_args[@]}" "$MCP_URL" 2>"$tmp_stderr") || true
 
   # Last line is the HTTP status code (from --write-out)
   RESPONSE_CODE=$(echo "$raw" | tail -n1)
   RESPONSE_BODY=$(echo "$raw" | sed '$d')
   RESPONSE_HEADERS=$(cat "$tmp_headers")
-  rm -f "$tmp_headers"
+  CURL_STDERR=$(cat "$tmp_stderr")
+  rm -f "$tmp_headers" "$tmp_stderr"
+
+  if [[ -n "$CURL_STDERR" ]]; then
+    info "  curl stderr: $CURL_STDERR"
+  fi
 
   # Extract Mcp-Session-Id header if present (case-insensitive)
   local sid
@@ -78,28 +85,30 @@ mcp_request() {
   fi
 }
 
-# Parse a field from the response body.
-# For SSE responses, extract the JSON from "data:" lines first.
-parse_json_field() {
-  local field="$1"
+# Extract the JSON body from the response, handling SSE format.
+# Outputs the JSON string to stdout.
+get_response_json() {
   local body="$RESPONSE_BODY"
 
   # If the body looks like SSE, extract the last data: line's JSON
   if echo "$body" | grep -q '^data: '; then
-    body=$(echo "$body" | grep '^data: ' | tail -1 | sed 's/^data: //')
+    echo "$body" | grep '^data: ' | tail -1 | sed 's/^data: //'
+  else
+    echo "$body"
   fi
+}
 
-  echo "$body" | python3 -c "
-import sys, json
-try:
-    obj = json.load(sys.stdin)
-    keys = '${field}'.split('.')
-    for k in keys:
-        obj = obj[k]
-    print(obj)
-except Exception:
-    print('')
-" 2>/dev/null || echo ""
+# Parse a dotted field path from the response JSON using jq.
+# Arguments: $1 = dotted field path (e.g. "result.protocolVersion")
+parse_json_field() {
+  local field="$1"
+  local json
+  json=$(get_response_json)
+
+  # Convert dotted path to jq path (e.g. "result.protocolVersion" -> ".result.protocolVersion")
+  local jq_path=".${field}"
+
+  echo "$json" | jq -r "$jq_path // empty" 2>/dev/null || echo ""
 }
 
 # ---------------------------------------------------------------------------
@@ -110,15 +119,19 @@ wait_for_ready() {
   info "Will retry up to $MAX_RETRIES times, every ${RETRY_INTERVAL}s"
 
   for i in $(seq 1 "$MAX_RETRIES"); do
+    # Use a lightweight POST to check if the gateway is responding.
+    # We send a minimal JSON-RPC ping; any HTTP response (even an error
+    # from the backend) means APIM is up. We only retry on connection
+    # failures and gateway-level errors (502/503/504).
     local code
     code=$(curl --silent --output /dev/null --write-out "%{http_code}" \
       --max-time 10 \
       --header "Content-Type: application/json" \
       --header "Accept: application/json, text/event-stream" \
-      --data '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"readiness-probe","version":"0.0.1"}}}' \
+      --data '{"jsonrpc":"2.0","id":0,"method":"ping"}' \
       "$MCP_URL" 2>/dev/null) || code="000"
 
-    if [[ "$code" =~ ^2[0-9]{2}$ ]]; then
+    if [[ "$code" != "000" && "$code" != "502" && "$code" != "503" && "$code" != "504" ]]; then
       pass "Endpoint ready (HTTP $code) after $i attempt(s)"
       return 0
     fi
@@ -225,21 +238,9 @@ EOF
   fi
 
   # Check that result.tools is present and is a list
-  local tools_count
-  tools_count=$(echo "$RESPONSE_BODY" | python3 -c "
-import sys, json
-try:
-    body = sys.stdin.read()
-    # Handle SSE format
-    if 'data: ' in body:
-        lines = [l for l in body.splitlines() if l.startswith('data: ')]
-        body = lines[-1].replace('data: ', '', 1)
-    obj = json.loads(body)
-    tools = obj.get('result', {}).get('tools', [])
-    print(len(tools))
-except Exception:
-    print('-1')
-" 2>/dev/null || echo "-1")
+  local json tools_count
+  json=$(get_response_json)
+  tools_count=$(echo "$json" | jq '.result.tools | length' 2>/dev/null || echo "-1")
 
   if [[ "$tools_count" -ge 0 ]]; then
     pass "tools/list returned $tools_count tool(s)"
@@ -247,9 +248,72 @@ except Exception:
     fail "tools/list response missing result.tools array"
     info "  Response body: $RESPONSE_BODY"
   fi
+
+  # Save the first tool name for the tools/call test
+  if [[ "$tools_count" -gt 0 ]]; then
+    FIRST_TOOL_NAME=$(echo "$json" | jq -r '.result.tools[0].name' 2>/dev/null || echo "")
+    info "  First tool: $FIRST_TOOL_NAME"
+  fi
 }
 
 # ---------------------------------------------------------------------------
+# Test 3: MCP tools/call — invoke the first tool from the list
+# ---------------------------------------------------------------------------
+test_tools_call() {
+  if [[ -z "$FIRST_TOOL_NAME" ]]; then
+    info "Test: MCP tools/call — SKIPPED (no tools available)"
+    return
+  fi
+
+  info "Test: MCP tools/call ($FIRST_TOOL_NAME)"
+
+  # Build a minimal tools/call request. We pass empty arguments — the goal is
+  # to verify that APIM proxies the request to the backend and returns a valid
+  # JSON-RPC response. Even an error response (e.g. missing required argument)
+  # proves the full proxy path works.
+  local body
+  body=$(jq -n \
+    --arg tool "$FIRST_TOOL_NAME" \
+    '{
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: {
+        name: $tool,
+        arguments: {}
+      }
+    }')
+
+  mcp_request "$body"
+
+  # Check HTTP status — any 2xx is fine
+  if [[ "$RESPONSE_CODE" =~ ^2[0-9]{2}$ ]]; then
+    pass "tools/call returned HTTP $RESPONSE_CODE"
+  else
+    fail "tools/call returned HTTP $RESPONSE_CODE (expected 2xx)"
+    info "  Response body: $RESPONSE_BODY"
+    return
+  fi
+
+  # Verify it's a valid JSON-RPC response (has either result or error)
+  local json has_result has_error
+  json=$(get_response_json)
+  has_result=$(echo "$json" | jq 'has("result")' 2>/dev/null || echo "false")
+  has_error=$(echo "$json" | jq 'has("error")' 2>/dev/null || echo "false")
+
+  if [[ "$has_result" == "true" ]]; then
+    pass "tools/call returned a result"
+  elif [[ "$has_error" == "true" ]]; then
+    # An error response is acceptable — it means the proxy path works,
+    # the backend just rejected the (empty) arguments.
+    local error_msg
+    error_msg=$(echo "$json" | jq -r '.error.message // "unknown"' 2>/dev/null)
+    pass "tools/call returned a JSON-RPC error (expected with empty args): $error_msg"
+  else
+    fail "tools/call response is not a valid JSON-RPC response (no result or error)"
+    info "  Response body: $RESPONSE_BODY"
+  fi
+}
 # Main
 # ---------------------------------------------------------------------------
 main() {
@@ -266,6 +330,9 @@ main() {
 
   echo ""
   test_tools_list
+
+  echo ""
+  test_tools_call
 
   echo ""
   echo "========================================"
