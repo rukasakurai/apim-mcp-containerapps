@@ -2,6 +2,8 @@
 
 A sample project demonstrating how to expose [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) servers through [Azure API Management](https://learn.microsoft.com/azure/api-management/) using Bicep and the [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/).
 
+> **Agent notes:** See [.github/agents/apim-mcp-bicep.agent.md](.github/agents/apim-mcp-bicep.agent.md) for detailed technical lessons on implementing MCP server exposure via Bicep, including the `union()` workaround, preview API version requirements, and a reverse-engineering workflow for undocumented Azure features.
+
 ## Overview
 
 MCP enables LLMs and AI agents to discover and invoke tools exposed by backend servers. Azure API Management can act as a gateway in front of these MCP servers, providing governance, security, and observability.
