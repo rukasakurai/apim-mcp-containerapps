@@ -12,12 +12,12 @@ This sample provisions an APIM **Standard V2** instance and configures it to exp
 
 ### Resources Created
 
-| Resource | Description |
-|----------|-------------|
-| **Resource Group** | Container for all deployed resources |
-| **Azure API Management** | Standard V2 SKU instance |
-| **APIM Backend** | Backend pointing to the MCP server base URL |
-| **APIM MCP API** | API of type `mcp` with `mcpProperties` exposing the MCP endpoint |
+| Resource                 | Description                                                      |
+| ------------------------ | ---------------------------------------------------------------- |
+| **Resource Group**       | Container for all deployed resources                             |
+| **Azure API Management** | Standard V2 SKU instance                                         |
+| **APIM Backend**         | Backend pointing to the MCP server base URL                      |
+| **APIM MCP API**         | API of type `mcp` with `mcpProperties` exposing the MCP endpoint |
 
 ### Key Bicep Details
 
@@ -93,28 +93,32 @@ This sample provisions an APIM **Standard V2** instance and configures it to exp
 ├── docs/
 │   ├── azure-coding-agent-guide.md  # Azure coding agent guidance
 │   └── azure-oidc-setup.md          # OIDC setup instructions
+├── tests/
+│   └── test-mcp-endpoint.sh         # MCP endpoint integration test script
 ├── .github/
 │   ├── agents/                # Copilot agent notes
 │   └── workflows/
-│       ├── apim-provision.yml       # CI workflow: lint, build, provision, teardown
+│       ├── apim-provision-test.yml   # CI workflow: lint, build, provision, test, teardown
 │       └── azure-oidc-check.yml     # OIDC credential verification
 └── README.md
 ```
 
 ## CI/CD
 
-The **APIM Bicep Provision** workflow (`.github/workflows/apim-provision.yml`) runs automatically on every push or pull request that modifies files in `infra/` or `azure.yaml`:
+The **APIM Bicep Provision & Test** workflow (`.github/workflows/apim-provision-test.yml`) runs automatically on every push or pull request that modifies files in `infra/`, `azure.yaml`, or `tests/`:
 
 - **Build & Lint** – validates Bicep files on every push and PR
-- **Provision & Teardown** – runs `azd provision` followed by `azd down` on pushes to `main` (requires Azure OIDC credentials configured as repository secrets/variables)
+- **Provision, Test & Teardown** – provisions infrastructure with `azd provision`, runs MCP endpoint integration tests against the deployed server, and tears down with `azd down` (requires Azure OIDC credentials configured as repository secrets/variables)
+
+The integration test (`tests/test-mcp-endpoint.sh`) validates that the MCP server responds correctly by sending `initialize` and `tools/list` JSON-RPC requests and checking response structure. The test includes a readiness probe with retries to handle APIM startup time.
 
 ### Required Repository Configuration
 
-| Name | Type | Description |
-|------|------|-------------|
-| `AZURE_CLIENT_ID` | Variable | App registration client ID for OIDC |
-| `AZURE_TENANT_ID` | Secret | Microsoft Entra ID tenant ID |
-| `AZURE_SUBSCRIPTION_ID` | Secret | Target Azure subscription ID |
+| Name                    | Type     | Description                         |
+| ----------------------- | -------- | ----------------------------------- |
+| `AZURE_CLIENT_ID`       | Variable | App registration client ID for OIDC |
+| `AZURE_TENANT_ID`       | Secret   | Microsoft Entra ID tenant ID        |
+| `AZURE_SUBSCRIPTION_ID` | Secret   | Target Azure subscription ID        |
 
 See [docs/azure-oidc-setup.md](docs/azure-oidc-setup.md) for OIDC setup instructions.
 
