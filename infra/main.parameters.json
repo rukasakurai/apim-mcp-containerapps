@@ -13,6 +13,24 @@
     },
     "publisherName": {
       "value": "${AZURE_APIM_PUBLISHER_NAME}"
+    },
+    "mcpServerDisplayName": {
+      "value": "${AZURE_MCP_SERVER_DISPLAY_NAME}"
+    },
+    "mcpServerName": {
+      "value": "${AZURE_MCP_SERVER_NAME}"
+    },
+    "mcpServerBasePath": {
+      "value": "${AZURE_MCP_SERVER_BASE_PATH}"
+    },
+    "mcpServerDescription": {
+      "value": "${AZURE_MCP_SERVER_DESCRIPTION}"
+    },
+    "mcpServerBackendBaseUrl": {
+      "value": "${AZURE_MCP_SERVER_BACKEND_BASE_URL}"
+    },
+    "mcpServerEndpointUriTemplate": {
+      "value": "${AZURE_MCP_SERVER_ENDPOINT_URI_TEMPLATE}"
     }
   }
 }
