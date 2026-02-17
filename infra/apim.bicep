@@ -28,7 +28,7 @@ param mcpServerDescription string
 @description('Backend MCP server base URL — the full URL to the MCP endpoint (e.g. https://learn.microsoft.com/api/mcp)')
 param mcpServerBackendBaseUrl string
 
-@description('MCP endpoint URI template on the backend (e.g. /mcp)')
+@description('MCP endpoint URI template on the backend (e.g. / when backend URL is the full MCP endpoint)')
 param mcpServerEndpointUriTemplate string
 
 // APIM instance (stable API version)
