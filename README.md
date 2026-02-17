@@ -1,10 +1,10 @@
 # APIM MCP Container Apps
 
-Azure API Management (Standard V2) infrastructure deployed with Bicep and the Azure Developer CLI (`azd`).
+Azure API Management (Standard V2) infrastructure with MCP (Model Context Protocol) server exposure, deployed with Bicep and the Azure Developer CLI (`azd`).
 
 ## Architecture
 
-This project provisions an Azure API Management instance using the **Standard V2** SKU via Bicep templates that are compatible with the Azure Developer CLI.
+This project provisions an Azure API Management instance using the **Standard V2** SKU and configures it to expose an existing MCP server, enabling LLMs and AI agents to securely access tools through the MCP protocol. See [Expose and govern an existing MCP server](https://learn.microsoft.com/en-us/azure/api-management/expose-existing-mcp-server) for background.
 
 ### Resources Created
 
@@ -12,6 +12,8 @@ This project provisions an Azure API Management instance using the **Standard V2
 |----------|-------------|
 | **Resource Group** | Container for all deployed resources |
 | **Azure API Management** | Standard V2 SKU instance |
+| **APIM Backend** | Backend pointing to the MCP server base URL |
+| **APIM MCP API** | API of type `mcp` with `mcpProperties` exposing the MCP endpoint |
 
 ## Prerequisites
 
@@ -42,9 +44,20 @@ This project provisions an Azure API Management instance using the **Standard V2
 
    You will be prompted for:
    - **Environment name** – used to name the resource group and resources
-   - **Azure location** – region for deployment (e.g., `eastus`)
+   - **Azure location** – region for deployment (e.g., `japaneast`)
    - **Publisher email** – required by API Management
    - **Publisher name** – organization name shown in the developer portal
+
+   You also need to set the MCP server configuration:
+
+   ```bash
+   azd env set AZURE_MCP_SERVER_DISPLAY_NAME "Microsoft Learn MCP Server"
+   azd env set AZURE_MCP_SERVER_NAME "microsoft-learn-mcp-server"
+   azd env set AZURE_MCP_SERVER_BASE_PATH "mslearn"
+   azd env set AZURE_MCP_SERVER_DESCRIPTION "Microsoft Learn MCP server exposed through APIM"
+   azd env set AZURE_MCP_SERVER_BACKEND_BASE_URL "https://learn.microsoft.com"
+   azd env set AZURE_MCP_SERVER_ENDPOINT_URI_TEMPLATE "/api/mcp"
+   ```
 
 4. **Tear down resources when done**
 
@@ -59,11 +72,12 @@ This project provisions an Azure API Management instance using the **Standard V2
 ├── infra/
 │   ├── main.bicep             # Main deployment (subscription scope)
 │   ├── main.parameters.json   # Parameter definitions with azd variable substitution
-│   ├── apim.bicep             # API Management module (Standard V2 SKU)
+│   ├── apim.bicep             # API Management module + MCP server config
 │   └── abbreviations.json     # Resource naming abbreviations
 ├── .github/
 │   ├── agents/
-│   │   └── apim.agent.md      # Agent notes and challenges
+│   │   ├── apim.agent.md           # Agent notes: APIM Bicep challenges
+│   │   └── apim-mcp-bicep.agent.md # Agent notes: MCP server IaC approach
 │   └── workflows/
 │       └── apim-provision.yml # CI workflow: lint, build, provision, teardown
 └── README.md
