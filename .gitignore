@@ -1,3 +1,9 @@
 # Local scratch files created during doc testing / CLI usage
 federated-credential.json
 
+# Bicep build artifacts
+infra/main.json
+
+# azd environment files
+.azure/
+
