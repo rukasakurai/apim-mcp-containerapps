@@ -45,6 +45,10 @@ jobs:
   provision:
     name: Provision, Test & Teardown
     needs: validate
+    # Only provision Azure resources on main branch pushes or manual dispatch.
+    # Feature branches and PRs run only the validate job (lint/build).
+    # The OIDC federated credential is scoped to refs/heads/main.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       AZURE_ENV_NAME: apim-ci-${{ github.run_id }}
