@@ -13,7 +13,7 @@ param location string
 param publisherEmail string
 
 @description('Publisher name for the API Management instance')
-param publisherName string = 'API Management'
+param publisherName string
 
 var abbrs = loadJsonContent('abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
