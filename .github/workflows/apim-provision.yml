@@ -9,6 +9,17 @@ on:
     paths:
       - 'infra/**'
       - 'azure.yaml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'provision-and-teardown'
+        type: choice
+        options:
+          - provision-and-teardown
+          - provision-only
+          - teardown-only
 
 permissions:
   id-token: write
@@ -50,6 +61,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Provision infrastructure
+        if: inputs.action != 'teardown-only'
         run: |
           azd config set auth.useAzCliAuth true
           azd provision --no-prompt
@@ -57,7 +69,7 @@ jobs:
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Teardown infrastructure
-        if: always()
+        if: always() && inputs.action != 'provision-only'
         run: azd down --force --purge --no-prompt
         env:
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
