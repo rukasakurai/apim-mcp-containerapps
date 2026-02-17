@@ -87,6 +87,28 @@ jobs:
         env:
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Diagnose APIM resources
+        if: inputs.action != 'teardown-only'
+        run: |
+          azd config set auth.useAzCliAuth true
+          RG=$(azd env get-value AZURE_RESOURCE_GROUP 2>/dev/null || echo "")
+          APIM_NAME=$(azd env get-value AZURE_APIM_NAME 2>/dev/null || echo "")
+          SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          echo "Resource Group: $RG"
+          echo "APIM Name: $APIM_NAME"
+          echo "--- APIs (preview API version) ---"
+          az rest --method GET \
+            --url "https://management.azure.com/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_NAME}/apis?api-version=2024-06-01-preview" \
+            --query "value[].{name:name, type:properties.type, path:properties.path, backendId:properties.backendId, serviceUrl:properties.serviceUrl, mcpProperties:properties.mcpProperties}" \
+            -o json 2>&1 || echo "Failed to list APIs"
+          echo "--- Backends ---"
+          az rest --method GET \
+            --url "https://management.azure.com/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM_NAME}/backends?api-version=2024-06-01-preview" \
+            --query "value[].{name:name, url:properties.url, protocol:properties.protocol}" \
+            -o json 2>&1 || echo "Failed to list backends"
+        env:
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: Test MCP endpoint
         if: inputs.action != 'teardown-only' && steps.get-mcp-url.outputs.mcp_url != ''
         timeout-minutes: 10
